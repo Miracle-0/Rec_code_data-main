@@ -43,50 +43,24 @@ def Train(dataset: dataloader.Loader, recommend_model, loss_class, epoch, config
     time_one_epoch = int(time.time() - start)
     return f"Loss{aver_loss:.3f}-Time{time_one_epoch}"
 
-# def test_one_batch(X):
-#     sorted_items = X[0].numpy()
-#     groundTrue = X[1]
-#     r = utils.getLabel(groundTrue, sorted_items)
-#     pre, recall, ndcg, hitratio = [], [], [], []
-#     for k in world.topks:
-#         ret = utils.RecallPrecision_ATk(groundTrue, r, k)
-#         pre.append(ret["precision"])
-#         recall.append(ret["recall"])
-#         ndcg.append(utils.NDCGatK_r(groundTrue, r, k))
-#         hitratio.append(utils.HitRatio(r))
-#     return {
-#         "recall": np.array(recall),
-#         "precision": np.array(pre),
-#         "ndcg": np.array(ndcg),
-#         "hitratio": np.array(hitratio),
-#     }
+def test_one_batch(X):
+    sorted_items = X[0].numpy()
+    groundTrue = X[1]
+    r = utils.getLabel(groundTrue, sorted_items)
+    pre, recall, ndcg, hitratio = [], [], [], []
+    for k in world.topks:
+        ret = utils.RecallPrecision_ATk(groundTrue, r, k)
+        pre.append(ret["precision"])
+        recall.append(ret["recall"])
+        ndcg.append(utils.NDCGatK_r(groundTrue, r, k))
+        hitratio.append(utils.HitRatio(r))
+    return {
+        "recall": np.array(recall),
+        "precision": np.array(pre),
+        "ndcg": np.array(ndcg),
+        "hitratio": np.array(hitratio),
+    }
 
-    # 原始负采样代码片段（简化示例）
-    batch_not_interaction_tensor = (~dataset.interaction_tensor[batch_users]).float()
-    batch_neg = torch.multinomial(
-        batch_not_interaction_tensor, 
-        config["num_negative_items"], 
-        replacement=True
-    )  # shape: [batch_size, num_negative_items]
-
-    # 新增：带噪声负采样
-    if config.get("noise_ratio", 0) > 0:
-        noise_ratio = config["noise_ratio"]
-        # 对每个用户注入已知正样本
-        noisy_batch_neg = batch_neg.clone()
-        for local_idx, u in enumerate(batch_users):
-            pos_items = dataset.getUserPosItems([u])[0]  # list of this user's train positives
-            if len(pos_items) == 0:
-                continue
-            num_to_inject = int(len(noisy_batch_neg[local_idx]) * noise_ratio)
-            num_to_inject = max(1, num_to_inject) if noise_ratio > 0 else 0
-            if num_to_inject > 0:
-                # 选取若干正样本
-                inject_pos = np.random.choice(pos_items, size=min(num_to_inject, len(pos_items)), replace=False)
-                inject_pos = torch.tensor(inject_pos, device=noisy_batch_neg.device)
-                # 随机替换掉 neg 的前 num_to_inject 个位置 (也可以随机选位置)
-                noisy_batch_neg[local_idx, :inject_pos.shape[0]] = inject_pos
-        batch_neg = noisy_batch_neg
 
 def Test(dataset, Recmodel, epoch, w=None, multicore=0):
     u_batch_size = world.config["test_u_batch_size"]
