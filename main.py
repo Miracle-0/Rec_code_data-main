@@ -61,21 +61,27 @@ if "NNI_PLATFORM" in os.environ:
     print("save_dir: ", save_dir)
     w: SummaryWriter = SummaryWriter(save_dir)
 else:
-    save_dir = join(
-        logroot,
-        time.strftime("%m-%d-%Hh%Mm%Ss-")
-        + "-"
-        + world.comment
-        + "-"
-        + world.config["loss"]
-        + "-"
-        + world.config["model"],
-    )
+    # 构建包含 noise_level 的日志目录名
+    log_name_parts = [
+        time.strftime("%m-%d-%Hh%Mm%Ss"),
+        world.config["dataset"],
+        world.config["model"],
+        world.config["loss"],
+    ]
+    # 只有在噪声采样时才添加 noise_level 标识
+    if world.config['experiment'] in ['noise_standard', 'noise_improved']:
+        log_name_parts.append(f"noise{world.config['noise_level']}")
+    
+    if world.comment:
+        log_name_parts.append(world.comment)
+
+    save_dir = join(logroot, "-".join(log_name_parts))
+    
     i = 0
     while os.path.exists(save_dir):
-        new_save_dir = save_dir + str(i)
         i += 1
-        save_dir = new_save_dir
+        save_dir = join(logroot, "-".join(log_name_parts) + f"_{i}")
+        
     w: SummaryWriter = SummaryWriter(save_dir)
     logger = CompleteLogger(root=save_dir)
 
@@ -150,13 +156,27 @@ for epoch in range(world.TRAIN_epochs):
             )
         print(valid_res)
 
+    # Baseline: 标准负采样 + 标准 Softmax Loss
+    if world.config["experiment"] == "baseline":
+        sampling_strategy = "standard"
+    # 噪声负采样 + 标准 Softmax Loss
+    elif world.config["experiment"] == "noise_standard":
+        sampling_strategy = "noise"
+    # 噪声负采样 + 改善的 Softmax Loss
+    elif world.config["experiment"] == "noise_improved":
+        sampling_strategy = "noise"
+        loss_func = LOSSES["capped_softmax"](model=Recmodel, config=world.config)
+    else:
+        raise ValueError(f"Unknown experiment type: {world.config['experiment']}")
+
     output_information = procedure.Train(
-        dataset = dataset,
-        recommend_model = Recmodel,
-        loss_class = loss_func,
-        epoch = epoch,
-        config = world.config,
-        w=w
+        dataset=dataset,
+        recommend_model=Recmodel,
+        loss_class=loss_func,
+        epoch=epoch,
+        config=world.config,
+        w=w,
+        sampling_strategy=sampling_strategy,  # 动态选择采样策略
     )
     print(f"EPOCH[{epoch + 1}/{world.TRAIN_epochs}] {output_information}")
 

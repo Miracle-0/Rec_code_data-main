@@ -2,7 +2,7 @@ from optimizer.optim_Base import IROptimizer
 from torch import nn
 import torch
 
-class SoftmaxOptimizer(IROptimizer):
+class CappedSoftmaxOptimizer(IROptimizer):
     def __init__(self, model, config):
         super().__init__()
 

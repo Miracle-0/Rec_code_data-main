@@ -4,6 +4,12 @@ import torch
 
 class SoftmaxOptimizer(IROptimizer):
     def __init__(self, model, config):
+        """
+        初始化 Softmax 优化器。
+        # lr: 学习率
+        # weight_decay: 权重衰减，用于正则化
+        # temp: 温度参数，用于调整 softmax 分布的平滑度
+        """
         super().__init__()
 
         # === Model ===
@@ -19,16 +25,23 @@ class SoftmaxOptimizer(IROptimizer):
 
     def cal_loss(self, y_pred):
         # clip parameter
-        pos_logits = torch.exp(y_pred[:, 0] / self.temp)
-        neg_logits = torch.exp(y_pred[:, 1:] / self.temp)
+        # y_pred[:, 0] 是正样本得分
+        # y_pred[:, 1:] 是所有负样本得分
 
+        # 1. 计算分子：exp(pos_score / temp)
+        pos_logits = torch.exp(y_pred[:, 0] / self.temp)
+        # 2. 计算分母的每一项：exp(neg_score / temp)
+        neg_logits = torch.exp(y_pred[:, 1:] / self.temp)
+        # 3. 计算分母总和：Sum(exp(neg_scores))
+        # 注意：这里变量名复用了 neg_logits，实际上变成了 "denominator_sum"
         neg_logits = torch.sum(neg_logits, dim=-1)
 
-
+        # 4. 计算 Loss：-log(分子 / 分母)
         loss = - torch.log(pos_logits / neg_logits).mean()
 
         return loss
 
+    # 正则化
     def regularize(self,users_emb, pos_emb, neg_emb):
         regularize = (torch.norm(users_emb[:, :]) ** 2
                       + torch.norm(pos_emb[:, :]) ** 2
@@ -60,11 +73,11 @@ class SoftmaxOptimizer(IROptimizer):
     def step(self, user, pos, neg):
         ssm_loss,emb_loss = self.cal_loss_graph(user, pos, neg)
         loss = ssm_loss + emb_loss
-        self.optimizer_descent.zero_grad()
+        self.optimizer_descent.zero_grad() # 清空之前的梯度
 
-        loss.backward()
+        loss.backward() # 反向传播求导
 
-        self.optimizer_descent.step()
+        self.optimizer_descent.step() # 更新参数
         return ssm_loss.cpu().item()
     
     def save(self,path):

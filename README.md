@@ -12,3 +12,9 @@ tools/procedure.py：实现噪声注入逻辑 + 写指标到 TensorBoard
 optimizer/optim_CappedSoftmax.py：实现 Capped Softmax Loss
 可选：utils.py 添加新指标（MRR@K）
 写一个 run script 批量跑不同 η 和 noise_ratio（后续）
+
+python main.py --model=mf --dataset=gowalla_10 --loss=softmax --trainbatch 1024 --testbatch 1024 --epochs 100 --cuda 0 --recdim 64 --comment="mf_eval" --experiment="noise_standard" --noise_level=0.2
+
+tensorboard --logdir .\log\gowalla_10 
+
+python main.py --model=mf --dataset=gowalla_10 --loss=softmax --trainbatch 1024 --testbatch 1024 --epochs 100 --cuda 0 --recdim 64 --comment="mf_eval"  

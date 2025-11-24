@@ -42,6 +42,9 @@ def parse_args():
     parser.add_argument("--cl_layer", type=int, default=0)
     parser.add_argument("--q", type=int, default=5)
 
+    # Experiment
+    parser.add_argument("--experiment", type=str, default="", help="specify the experiment type")
+    parser.add_argument("--noise_level", type=float, default=0.1, help="noise level for noisy negative sampling")
 
     return parser.parse_args()
 
@@ -67,18 +70,17 @@ config = {
     "norm_emb": args.norm_emb,
     "full_batch": args.full_batch,
     "num_negative_items": args.num_negative_items,
-    
     "cuda": args.cuda,
     "ssm_temp": args.ssm_temp,
     "resume_dir": args.resume_dir,
-    
     "neg_coefficient": args.neg_coefficient,
-    
     "cl_rate": args.cl_rate,
     "eps": args.eps,
     "cl_temp": args.cl_temp,
     "cl_layer": args.cl_layer,
     "q": args.q,
+    "experiment": args.experiment if args.experiment else "baseline",  # 新增的键，用于指定实验类型
+    "noise_level": args.noise_level,
 }
 
 CORES = multiprocessing.cpu_count() // 2

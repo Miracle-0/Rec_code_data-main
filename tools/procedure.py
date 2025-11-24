@@ -11,7 +11,19 @@ from tools.world import cprint
 
 CORES = multiprocessing.cpu_count() // 2  # 可根据机器调整
 
-def Train(dataset: dataloader.Loader, recommend_model, loss_class, epoch, config, w=None):
+def Train(dataset: dataloader.Loader, recommend_model, loss_class, epoch, config, w=None, sampling_strategy="standard"):
+    """
+    Train function with support for standard and noise-aware negative sampling.
+
+    Args:
+        dataset: 数据加载器
+        recommend_model: 推荐模型
+        loss_class: 损失函数
+        epoch: 当前训练轮次
+        config: 配置字典
+        w: TensorBoard writer
+        sampling_strategy: 负采样策略 ("standard" 或 "noise")
+    """
     Recmodel = recommend_model
     Recmodel.train()
     loss = loss_class
@@ -30,8 +42,19 @@ def Train(dataset: dataloader.Loader, recommend_model, loss_class, epoch, config
         batch_users = batch_users.cuda(non_blocking=True)
         batch_pos = batch_pos.cuda(non_blocking=True)
 
-        batch_not_interaction_tensor = (~dataset.interaction_tensor[batch_users]).float()
-        batch_neg = torch.multinomial(batch_not_interaction_tensor, config["num_negative_items"], replacement=True)
+        if sampling_strategy == "standard":
+            # 标准负采样
+            batch_not_interaction_tensor = (~dataset.interaction_tensor[batch_users]).float()
+            batch_neg = torch.multinomial(batch_not_interaction_tensor, config["num_negative_items"], replacement=True)
+        elif sampling_strategy == "noise":
+            # 噪声负采样
+            batch_not_interaction_tensor = (~dataset.interaction_tensor[batch_users]).float()
+            noise = torch.rand_like(batch_not_interaction_tensor) * config.get("noise_level", 0.1)
+            noisy_tensor = batch_not_interaction_tensor + noise
+            batch_neg = torch.multinomial(noisy_tensor, config["num_negative_items"], replacement=True)
+        else:
+            raise ValueError(f"Unknown sampling strategy: {sampling_strategy}")
+
         cri = loss.step(batch_users, batch_pos, batch_neg)
         if w is not None:
             w.add_scalar("Train/Loss_iter", cri, iter_num + batch_id)
