@@ -18,3 +18,6 @@ python main.py --model=mf --dataset=gowalla_10 --loss=softmax --trainbatch 1024 
 tensorboard --logdir .\log\gowalla_10 
 
 python main.py --model=mf --dataset=gowalla_10 --loss=softmax --trainbatch 1024 --testbatch 1024 --epochs 100 --cuda 0 --recdim 64 --comment="mf_eval"  
+
+dataset: 里面有各种数据集
+model：里面是各种推荐模型算法

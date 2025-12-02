@@ -46,6 +46,8 @@ def parse_args():
     parser.add_argument("--experiment", type=str, default="", help="specify the experiment type")
     parser.add_argument("--noise_level", type=float, default=0.1, help="noise level for noisy negative sampling")
 
+    parser.add_argument("--debug_noise", type=int, default=0, help="print and log noise injection stats")
+
     return parser.parse_args()
 
 
@@ -81,6 +83,8 @@ config = {
     "q": args.q,
     "experiment": args.experiment if args.experiment else "baseline",  # 新增的键，用于指定实验类型
     "noise_level": args.noise_level,
+    "eta": args.eta if hasattr(args, 'eta') else 1,
+    "debug_noise": args.debug_noise
 }
 
 CORES = multiprocessing.cpu_count() // 2
