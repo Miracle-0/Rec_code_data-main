@@ -43,17 +43,66 @@ def Train(dataset: dataloader.Loader, recommend_model, loss_class, epoch, config
         batch_pos = batch_pos.cuda(non_blocking=True)
 
         if sampling_strategy == "standard":
-            # 标准负采样
+            # 标准负采样：严格从非交互物品中采样 (~interaction)
             batch_not_interaction_tensor = (~dataset.interaction_tensor[batch_users]).float()
             batch_neg = torch.multinomial(batch_not_interaction_tensor, config["num_negative_items"], replacement=True)
         elif sampling_strategy == "noise":
-            # 噪声负采样
+            # 噪声负采样：人为引入噪声以测试鲁棒性
+            # 策略：混合策略。大部分样本来自“未交互项”（标准负样本），
+            # 少部分样本来自“全集随机项”（可能包含正样本，即引入了 False Negative 噪声）
+            
+            num_neg = config["num_negative_items"]
+            noise_ratio = config.get("noise_ratio", 0.2) # 默认引入 20% 的噪声，可从 config 读取
+            
+            num_noise = int(num_neg * noise_ratio)
+            num_clean = num_neg - num_noise
+
+            # 1. 清洁部分 (Standard Negative Sampling)
             batch_not_interaction_tensor = (~dataset.interaction_tensor[batch_users]).float()
-            noise = torch.rand_like(batch_not_interaction_tensor) * config.get("noise_level", 0.1)
-            noisy_tensor = batch_not_interaction_tensor + noise
-            batch_neg = torch.multinomial(noisy_tensor, config["num_negative_items"], replacement=True)
+            batch_neg_clean = torch.multinomial(batch_not_interaction_tensor, num_clean, replacement=True)
+
+            # 2. 噪声部分 (Random Sampling - 模拟噪声干扰)
+            # 直接在所有物品 ID 范围内随机采样，不避开用户喜欢的物品
+            m_items = dataset.interaction_tensor.size(1)
+            batch_neg_noise = torch.randint(0, m_items, (len(batch_users), num_noise)).cuda()
+
+            # 3. 拼接
+            batch_neg = torch.cat([batch_neg_clean, batch_neg_noise], dim=1)
         else:
             raise ValueError(f"Unknown sampling strategy: {sampling_strategy}")
+
+        # ================= 验证代码开始 (调试完成后可删除) =================
+        # if batch_id == 0: # 只在每个 epoch 的第一个 batch 检查，避免刷屏
+            # 获取当前 batch 用户的真实交互历史 (1 表示交互过，0 表示未交互)
+            # 注意：dataset.interaction_tensor 通常在 CPU 上，需要转到 GPU 才能和 batch_neg (GPU) 运算
+            current_user_history = dataset.interaction_tensor[batch_users].cuda()
+            
+            # 使用 gather 函数，检查 batch_neg 对应的索引在历史记录中是否为 1
+            # batch_neg 形状: [batch_size, num_neg]
+            # hits 形状: [batch_size, num_neg]，如果某位置是 1，说明该负样本其实是正样本（噪声）
+            hits = torch.gather(current_user_history, 1, batch_neg)
+            
+            noise_count = hits.sum().item()
+            total_samples = hits.numel()
+            noise_rate = noise_count / total_samples
+            
+            print(f"\n[验证采样策略: {sampling_strategy}]")
+            print(f"  - 负样本总数: {total_samples}")
+            print(f"  - 命中正样本数 (False Negatives): {int(noise_count)}")
+            print(f"  - 实际噪声率: {noise_rate:.4%}")
+            
+            if sampling_strategy == "standard":
+                if noise_count == 0:
+                    print("  -> 验证通过：标准采样未引入噪声。")
+                else:
+                    print("  -> 警告：标准采样中发现了噪声！代码可能存在 Bug。")
+            elif sampling_strategy == "noise":
+                if noise_count > 0:
+                    print("  -> 验证通过：成功引入了噪声。")
+                else:
+                    print("  -> 提示：当前 Batch 未命中噪声（如果噪声比例很低，这可能是正常的，多跑几轮看看）。")
+            print("="*60 + "\n")
+        # ================= 验证代码结束 =================
 
         cri = loss.step(batch_users, batch_pos, batch_neg)
         if w is not None:
